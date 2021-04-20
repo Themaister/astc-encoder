@@ -58,6 +58,15 @@ add_executable(astc${CODEC}-${ISA_SIMD}
         astcenccli_toplevel.cpp
         astcenccli_toplevel_help.cpp)
 
+target_compile_features(astc${CODEC}-${ISA_SIMD}
+    PRIVATE
+        cxx_std_14)
+
+target_compile_definitions(astc${CODEC}-${ISA_SIMD}
+    PRIVATE
+        # MSVC defines
+        $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>)
+
 target_link_libraries(astc${CODEC}-${ISA_SIMD} PRIVATE astc${CODEC}-${ISA_SIMD}-static)
 
 macro(astc_set_properties NAME)

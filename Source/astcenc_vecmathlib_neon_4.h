@@ -145,6 +145,34 @@ struct vfloat4
 	}
 
 	/**
+	 * @brief Return a swizzled float 2.
+	 */
+	template <int l0, int l1> ASTCENC_SIMD_INLINE float2 swz() const
+	{
+		return float2(lane<l0>(), lane<l1>());
+	}
+
+	/**
+	 * @brief Return a swizzled float 3.
+	 *
+	 * TODO: Implement using permutes.
+	 */
+	template <int l0, int l1, int l2> ASTCENC_SIMD_INLINE vfloat4 swz() const
+	{
+		return vfloat4(lane<l0>(), lane<l1>(), lane<l2>(), 0.0f);
+	}
+
+	/**
+	 * @brief Return a swizzled float 4.
+	 *
+	 * TODO: Implement using permutes.
+	 */
+	template <int l0, int l1, int l2, int l3> ASTCENC_SIMD_INLINE vfloat4 swz() const
+	{
+		return vfloat4(lane<l0>(), lane<l1>(), lane<l2>(), lane<l3>());
+	}
+
+	/**
 	 * @brief The vector ...
 	 */
 	float32x4_t m;
@@ -222,6 +250,14 @@ struct vint4
 	template <int l> ASTCENC_SIMD_INLINE int lane() const
 	{
 		return vgetq_lane_s32(m, l);
+	}
+
+	/**
+	 * @brief Set the scalar value of a single lane.
+	 */
+	template <int l> ASTCENC_SIMD_INLINE void set_lane(int a)
+	{
+		m = vld1q_lane_s32(&a, m, l);
 	}
 
 	/**
@@ -379,6 +415,22 @@ ASTCENC_SIMD_INLINE vint4 operator-(vint4 a, vint4 b)
 }
 
 /**
+ * @brief Overload: vector by vector multiplication.
+ */
+ASTCENC_SIMD_INLINE vint4 operator*(vint4 a, vint4 b)
+{
+	return vint4(vmulq_s32(a.m, b.m));
+}
+
+/**
+ * @brief Overload: vector by scalar multiplication.
+ */
+ASTCENC_SIMD_INLINE vint4 operator*(vint4 a, int b)
+{
+	return vint4(vmulq_s32(a.m, vdupq_n_s32(b)));
+}
+
+/**
  * @brief Overload: vector bit invert.
  */
 ASTCENC_SIMD_INLINE vint4 operator~(vint4 a)
@@ -443,6 +495,14 @@ ASTCENC_SIMD_INLINE vmask4 operator>(vint4 a, vint4 b)
 }
 
 /**
+ * @brief Logical shift right.
+ */
+template <int s> ASTCENC_SIMD_INLINE vint4 lsr(vint4 a)
+{
+	return vint4(vshlq_s32(a.m, vdupq_n_s32(-s)));
+}
+
+/**
  * @brief Return the min vector of two vectors.
  */
 ASTCENC_SIMD_INLINE vint4 min(vint4 a, vint4 b)
@@ -470,6 +530,14 @@ ASTCENC_SIMD_INLINE vint4 hmin(vint4 a)
  * @brief Store a vector to a 16B aligned memory address.
  */
 ASTCENC_SIMD_INLINE void storea(vint4 a, int* p)
+{
+	vst1q_s32(p, a.m);
+}
+
+/**
+ * @brief Store a vector to an unaligned memory address.
+ */
+ASTCENC_SIMD_INLINE void store(vint4 a, int* p)
 {
 	vst1q_s32(p, a.m);
 }
@@ -770,6 +838,15 @@ ASTCENC_SIMD_INLINE float hmin_s(vfloat4 a)
 }
 
 /**
+ * @brief Return the horizontal min of RGB vector lanes as a scalar.
+ */
+ASTCENC_SIMD_INLINE float hmin_rgb_s(vfloat4 a)
+{
+	a.set_lane<3>(a.lane<0>());
+	return hmin_s(a);
+}
+
+/**
  * @brief Return the horizontal maximum of a vector.
  */
 ASTCENC_SIMD_INLINE vfloat4 hmax(vfloat4 a)
@@ -792,6 +869,15 @@ ASTCENC_SIMD_INLINE float hadd_s(vfloat4 a)
 {
 	float32x2_t t = vadd_f32(vget_high_f32(a.m), vget_low_f32(a.m));
 	return vget_lane_f32(vpadd_f32(t, t), 0);
+}
+
+/**
+ * @brief Return the horizontal sum of RGB vector lanes as a scalar.
+ */
+ASTCENC_SIMD_INLINE float hadd_rgb_s(vfloat4 a)
+{
+	a.set_lane<3>(0.0f);
+	return hadd_s(a);
 }
 
 /**
@@ -860,19 +946,24 @@ ASTCENC_SIMD_INLINE float dot_s(vfloat4 a, vfloat4 b)
 }
 
 /**
- * @brief Generate a reciprocal of a vector.
+ * @brief Return the dot product for the first 3 lanes, returning vector.
  */
-ASTCENC_SIMD_INLINE vfloat4 recip(vfloat4 b)
+ASTCENC_SIMD_INLINE vfloat4 dot3(vfloat4 a, vfloat4 b)
 {
-	return 1.0f / b;
+	// Clear lane to zero to ensure it's not in the dot()
+	a.set_lane<3>(0.0f);
+	a = vfloat4(vaddvq_f32(vmulq_f32(a.m, b.m)));
+	// Clear lane so we return only a vec3
+	a.set_lane<3>(0.0f);
+	return a;
 }
 
 /**
- * @brief Generate an approximate reciprocal of a vector.
+ * @brief Return the dot product for the first 3 lanes, returning scalar.
  */
-ASTCENC_SIMD_INLINE vfloat4 fast_recip(vfloat4 b)
+ASTCENC_SIMD_INLINE float dot3_s(vfloat4 a, vfloat4 b)
 {
-	return vfloat4(vrecpeq_f32(b.m));
+	return dot3(a, b).lane<0>();
 }
 
 /**
@@ -900,6 +991,14 @@ ASTCENC_SIMD_INLINE vint4 float_to_int_rtn(vfloat4 a)
 {
 	a = round(a);
 	return vint4(vcvtq_s32_f32(a.m));
+}
+
+/**
+ * @brief Return a float value for an integer vector.
+ */
+ASTCENC_SIMD_INLINE vfloat4 int_to_float(vint4 a)
+{
+	return vfloat4(vcvtq_f32_s32(a.m));
 }
 
 /**

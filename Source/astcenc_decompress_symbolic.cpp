@@ -33,42 +33,38 @@ static int compute_value_of_texel_int(
 	int weights_to_evaluate = it->texel_weight_count[texel_to_get];
 	for (int i = 0; i < weights_to_evaluate; i++)
 	{
-		summed_value += weights[it->texel_weights_t4[texel_to_get][i]] * it->texel_weights_int_t4[texel_to_get][i];
+		summed_value += weights[it->texel_weights_t4[texel_to_get][i]]
+		              * it->texel_weights_int_t4[texel_to_get][i];
 	}
 	return summed_value >> 4;
 }
 
-static uint4 lerp_color_int(
+static vfloat4 lerp_color_int(
 	astcenc_profile decode_mode,
-	uint4 color0,
-	uint4 color1,
+	vint4 color0,
+	vint4 color1,
 	int weight,
 	int plane2_weight,
-	int plane2_color_component	// -1 in 1-plane mode
+	vmask4 plane2_mask
 ) {
-	uint4 weight1 = uint4(
-		plane2_color_component == 0 ? plane2_weight : weight,
-		plane2_color_component == 1 ? plane2_weight : weight,
-		plane2_color_component == 2 ? plane2_weight : weight,
-		plane2_color_component == 3 ? plane2_weight : weight);
-
-	uint4 weight0 = uint4(64, 64, 64, 64) - weight1;
+	vint4 weight1 = select(vint4(weight), vint4(plane2_weight), plane2_mask);
+	vint4 weight0 = vint4(64) - weight1;
 
 	if (decode_mode == ASTCENC_PRF_LDR_SRGB)
 	{
-		color0 = uint4(color0.r >> 8, color0.g >> 8, color0.b >> 8, color0.a >> 8);
-		color1 = uint4(color1.r >> 8, color1.g >> 8, color1.b >> 8, color1.a >> 8);
+		color0 = lsr<8>(color0);
+		color1 = lsr<8>(color1);
 	}
 
-	uint4 color = (color0 * weight0) + (color1 * weight1) + uint4(32, 32, 32, 32);
-	color = uint4(color.r >> 6, color.g >> 6, color.b >> 6, color.a >> 6);
+	vint4 color = (color0 * weight0) + (color1 * weight1) + vint4(32);
+	color = lsr<6>(color);
 
 	if (decode_mode == ASTCENC_PRF_LDR_SRGB)
 	{
-		color = color * 257u;
+		color = color * vint4(257);
 	}
 
-	return color;
+	return int_to_float(color);
 }
 
 void decompress_symbolic_block(
@@ -213,8 +209,8 @@ void decompress_symbolic_block(
 	int weight_quant_level = bm.quant_mode;
 
 	// decode the color endpoints
-	uint4 color_endpoint0[4];
-	uint4 color_endpoint1[4];
+	vint4 color_endpoint0[4];
+	vint4 color_endpoint1[4];
 	int rgb_hdr_endpoint[4];
 	int alpha_hdr_endpoint[4];
 	int nan_endpoint[4];
@@ -269,28 +265,32 @@ void decompress_symbolic_block(
 		}
 	}
 
-	int plane2_color_component = scb->plane2_color_component;
+	// Now that we have endpoint colors and weights, we can unpack texel colors
+	int plane2_color_component = is_dual_plane ? scb->plane2_color_component : -1;
+	vmask4 plane2_mask = vint4::lane_id() == vint4(plane2_color_component);
 
-	// Now that we have endpoint colors and weights, we can unpack actual colors for each texel.
 	for (int i = 0; i < bsd->texel_count; i++)
 	{
 		int partition = pt->partition_of_texel[i];
 
-		uint4 color = lerp_color_int(decode_mode,
-		                             color_endpoint0[partition],
-		                             color_endpoint1[partition],
-		                             weights[i],
-		                             plane2_weights[i],
-		                             is_dual_plane ? plane2_color_component : -1);
+		vint4 ep0 = color_endpoint0[partition];
+		vint4 ep1 = color_endpoint1[partition];
+
+		vfloat4 color = lerp_color_int(decode_mode,
+		                               ep0,
+		                               ep1,
+		                               weights[i],
+		                               plane2_weights[i],
+		                               plane2_mask);
 
 		blk->rgb_lns[i] = rgb_hdr_endpoint[partition];
 		blk->alpha_lns[i] = alpha_hdr_endpoint[partition];
 		blk->nan_texel[i] = nan_endpoint[partition];
 
-		blk->data_r[i] = (float)color.r;
-		blk->data_g[i] = (float)color.g;
-		blk->data_b[i] = (float)color.b;
-		blk->data_a[i] = (float)color.a;
+		blk->data_r[i] = color.lane<0>();
+		blk->data_g[i] = color.lane<1>();
+		blk->data_b[i] = color.lane<2>();
+		blk->data_a[i] = color.lane<3>();
 	}
 
 	imageblock_initialize_orig_from_work(blk, bsd->texel_count);
@@ -335,8 +335,8 @@ float compute_symbolic_block_difference(
 	promise(texel_count > 0);
 
 	// decode the color endpoints
-	uint4 color_endpoint0[4];
-	uint4 color_endpoint1[4];
+	vint4 color_endpoint0[4];
+	vint4 color_endpoint1[4];
 	int rgb_hdr_endpoint[4];
 	int alpha_hdr_endpoint[4];
 	int nan_endpoint[4];
@@ -390,47 +390,35 @@ float compute_symbolic_block_difference(
 		}
 	}
 
-	int plane2_color_component = scb->plane2_color_component;
+	// Now that we have endpoint colors and weights, we can unpack texel colors
+	int plane2_color_component = is_dual_plane ? scb->plane2_color_component : -1;
+	vmask4 plane2_mask = vint4::lane_id() == vint4(plane2_color_component);
 
-	// now that we have endpoint colors and weights, we can unpack actual colors for
-	// each texel.
 	float summa = 0.0f;
 	for (int i = 0; i < texel_count; i++)
 	{
 		int partition = pt->partition_of_texel[i];
 
-		uint4 color = lerp_color_int(decode_mode,
-		                             color_endpoint0[partition],
-		                             color_endpoint1[partition],
-		                             weights[i],
-		                             plane2_weights[i],
-		                             is_dual_plane ? plane2_color_component : -1);
+		vint4 ep0 = color_endpoint0[partition];
+		vint4 ep1 = color_endpoint1[partition];
 
-		float4 newColor = float4((float)color.r,
-		                         (float)color.g,
-		                         (float)color.b,
-		                         (float)color.a);
+		vfloat4 color = lerp_color_int(decode_mode,
+		                               ep0,
+		                               ep1,
+		                               weights[i],
+		                               plane2_weights[i],
+		                               plane2_mask);
 
-		float4 oldColor = float4(pb->data_r[i],
-		                         pb->data_g[i],
-		                         pb->data_b[i],
-		                         pb->data_a[i]);
+		vfloat4 oldColor = pb->texel(i);
 
-		float4 error = oldColor - newColor;
+		vfloat4 error = oldColor - color;
 
-		error.r = astc::min(fabsf(error.r), 1e15f);
-		error.g = astc::min(fabsf(error.g), 1e15f);
-		error.b = astc::min(fabsf(error.b), 1e15f);
-		error.a = astc::min(fabsf(error.a), 1e15f);
-
+		error = min(abs(error), 1e15f);
 		error = error * error;
 
-		float4 errorWeight = float4(ewb->error_weights[i].r,
-		                            ewb->error_weights[i].g,
-		                            ewb->error_weights[i].b,
-		                            ewb->error_weights[i].a);
+		vfloat4 errorWeight = ewb->error_weights[i];
 
-		float metric = dot(error, errorWeight);
+		float metric = dot_s(error, errorWeight);
 		summa += astc::clamp(metric, 0.0f, 1e30f);
 	}
 

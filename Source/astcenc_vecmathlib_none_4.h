@@ -40,6 +40,7 @@
 	#error "Include astcenc_vecmathlib.h, do not include directly"
 #endif
 
+#include <algorithm>
 #include <cstring>
 
 // ============================================================================
@@ -145,6 +146,30 @@ struct vfloat4
 	}
 
 	/**
+	 * @brief Return a swizzled float 2.
+	 */
+	template <int l0, int l1> ASTCENC_SIMD_INLINE float2 swz() const
+	{
+		return float2(lane<l0>(), lane<l1>());
+	}
+
+	/**
+	 * @brief Return a swizzled float 3.
+	 */
+	template <int l0, int l1, int l2> ASTCENC_SIMD_INLINE vfloat4 swz() const
+	{
+		return vfloat4(lane<l0>(), lane<l1>(), lane<l2>(), 0.0f);
+	}
+
+	/**
+	 * @brief Return a swizzled float 4.
+	 */
+	template <int l0, int l1, int l2, int l3> ASTCENC_SIMD_INLINE vfloat4 swz() const
+	{
+		return vfloat4(lane<l0>(), lane<l1>(), lane<l2>(), lane<l3>());
+	}
+
+	/**
 	 * @brief The vector ...
 	 */
 	float m[4];
@@ -222,6 +247,14 @@ struct vint4
 	template <int l> ASTCENC_SIMD_INLINE int lane() const
 	{
 		return m[l];
+	}
+
+	/**
+	 * @brief Set the scalar value of a single lane.
+	 */
+	template <int l> ASTCENC_SIMD_INLINE void set_lane(int a)
+	{
+		m[l] = a;
 	}
 
 	/**
@@ -405,6 +438,28 @@ ASTCENC_SIMD_INLINE vint4 operator-(vint4 a, vint4 b)
 }
 
 /**
+ * @brief Overload: vector by vector multiplication.
+ */
+ASTCENC_SIMD_INLINE vint4 operator*(vint4 a, vint4 b)
+{
+	return vint4(a.m[0] * b.m[0],
+	             a.m[1] * b.m[1],
+	             a.m[2] * b.m[2],
+	             a.m[3] * b.m[3]);
+}
+
+/**
+ * @brief Overload: vector by scalar multiplication.
+ */
+ASTCENC_SIMD_INLINE vint4 operator*(vint4 a, int b)
+{
+	return vint4(a.m[0] * b,
+	             a.m[1] * b,
+	             a.m[2] * b,
+	             a.m[3] * b);
+}
+
+/**
  * @brief Overload: vector bit invert.
  */
 ASTCENC_SIMD_INLINE vint4 operator~(vint4 a)
@@ -493,6 +548,17 @@ ASTCENC_SIMD_INLINE vmask4 operator>(vint4 a, vint4 b)
 }
 
 /**
+ * @brief Logical shift right.
+ */
+template <int s> ASTCENC_SIMD_INLINE vint4 lsr(vint4 a)
+{
+	return vint4(a.m[0] >> s,
+	             a.m[1] >> s,
+	             a.m[2] >> s,
+	             a.m[3] >> s);
+}
+
+/**
  * @brief Return the min vector of two vectors.
  */
 ASTCENC_SIMD_INLINE vint4 min(vint4 a, vint4 b)
@@ -528,6 +594,17 @@ ASTCENC_SIMD_INLINE vint4 hmin(vint4 a)
  * @brief Store a vector to an aligned memory address.
  */
 ASTCENC_SIMD_INLINE void storea(vint4 a, int* p)
+{
+	p[0] = a.m[0];
+	p[1] = a.m[1];
+	p[2] = a.m[2];
+	p[3] = a.m[3];
+}
+
+/**
+ * @brief Store a vector to an unaligned memory address.
+ */
+ASTCENC_SIMD_INLINE void store(vint4 a, int* p)
 {
 	p[0] = a.m[0];
 	p[1] = a.m[1];
@@ -863,6 +940,15 @@ ASTCENC_SIMD_INLINE float hmin_s(vfloat4 a)
 }
 
 /**
+ * @brief Return the horizontal min of RGB vector lanes as a scalar.
+ */
+ASTCENC_SIMD_INLINE float hmin_rgb_s(vfloat4 a)
+{
+	a.set_lane<3>(a.lane<0>());
+	return hmin_s(a);
+}
+
+/**
  * @brief Return the horizontal maximum of a vector.
  */
 ASTCENC_SIMD_INLINE vfloat4 hmax(vfloat4 a)
@@ -886,6 +972,15 @@ ASTCENC_SIMD_INLINE float hmax_s(vfloat4 a)
 ASTCENC_SIMD_INLINE float hadd_s(vfloat4 a)
 {
 	return (a.m[0] + a.m[1]) + (a.m[2] + a.m[3]);
+}
+
+
+/**
+ * @brief Return the horizontal sum of RGB vector lanes as a scalar.
+ */
+ASTCENC_SIMD_INLINE float hadd_rgb_s(vfloat4 a)
+{
+	return a.m[0] + a.m[1] + a.m[2];
 }
 
 /**
@@ -944,19 +1039,6 @@ ASTCENC_SIMD_INLINE void storea(vfloat4 a, float* ptr)
 }
 
 /**
- * @brief Return the dot product for the full 4 lanes, returning vector.
- */
-ASTCENC_SIMD_INLINE vfloat4 dot(vfloat4 a, vfloat4 b)
-{
-	float s = a.m[0] * b.m[0] +
-	          a.m[1] * b.m[1] +
-	          a.m[2] * b.m[2] +
-	          a.m[3] * b.m[3];
-
-	return vfloat4(s);
-}
-
-/**
  * @brief Return the dot product for the full 4 lanes, returning scalar.
  */
 ASTCENC_SIMD_INLINE float dot_s(vfloat4 a, vfloat4 b)
@@ -968,19 +1050,30 @@ ASTCENC_SIMD_INLINE float dot_s(vfloat4 a, vfloat4 b)
 }
 
 /**
- * @brief Generate a reciprocal of a vector.
+ * @brief Return the dot product for the full 4 lanes, returning vector.
  */
-ASTCENC_SIMD_INLINE vfloat4 recip(vfloat4 b)
+ASTCENC_SIMD_INLINE vfloat4 dot(vfloat4 a, vfloat4 b)
 {
-	return 1.0f / b;
+	return vfloat4(dot_s(a, b));
 }
 
 /**
- * @brief Generate an approximate reciprocal of a vector.
+ * @brief Return the dot product for first 3 lanes, returning scalar.
  */
-ASTCENC_SIMD_INLINE vfloat4 fast_recip(vfloat4 b)
+ASTCENC_SIMD_INLINE float dot3_s(vfloat4 a, vfloat4 b)
 {
-	return 1.0f / b;
+	return a.m[0] * b.m[0] +
+	       a.m[1] * b.m[1] +
+	       a.m[2] * b.m[2];
+}
+
+/**
+ * @brief Return the dot product for first 3 lanes, returning vector.
+ */
+ASTCENC_SIMD_INLINE vfloat4 dot3(vfloat4 a, vfloat4 b)
+{
+	float d3 = dot3_s(a, b);
+	return vfloat4(d3, d3, d3, 0.0f);
 }
 
 /**
@@ -1013,6 +1106,17 @@ ASTCENC_SIMD_INLINE vint4 float_to_int_rtn(vfloat4 a)
 	             (int)(a.m[1] + 0.5f),
 	             (int)(a.m[2] + 0.5f),
 	             (int)(a.m[3] + 0.5f));
+}
+
+/**
+ * @brief Return a integer value for a float vector, using truncation.
+ */
+ASTCENC_SIMD_INLINE vfloat4 int_to_float(vint4 a)
+{
+	return vfloat4((float)a.m[0],
+	               (float)a.m[1],
+	               (float)a.m[2],
+	               (float)a.m[3]);
 }
 
 /**

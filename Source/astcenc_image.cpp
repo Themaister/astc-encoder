@@ -41,7 +41,7 @@ static float float_to_lns(float p)
 	}
 
 	int expo;
-	float normfrac = frexpf(p, &expo);
+	float normfrac = astc::frexp(p, &expo);
 	float p1;
 	if (expo < -13)
 	{
@@ -56,11 +56,17 @@ static float float_to_lns(float p)
 	}
 
 	if (p1 < 384.0f)
+	{
 		p1 *= 4.0f / 3.0f;
+	}
 	else if (p1 <= 1408.0f)
+	{
 		p1 += 128.0f;
+	}
 	else
+	{
 		p1 = (p1 + 512.0f) * (4.0f / 5.0f);
+	}
 
 	p1 += ((float)expo) * 2048.0f;
 	return p1 + 1.0f;
@@ -72,15 +78,23 @@ static uint16_t lns_to_sf16(uint16_t p)
 	uint16_t ec = p >> 11;
 	uint16_t mt;
 	if (mc < 512)
+	{
 		mt = 3 * mc;
+	}
 	else if (mc < 1536)
+	{
 		mt = 4 * mc - 512;
+	}
 	else
+	{
 		mt = 5 * mc - 2048;
+	}
 
 	uint16_t res = (ec << 10) | (mt >> 3);
 	if (res > 0x7BFF)
+	{
 		res = 0x7BFF;
+	}
 	return res;
 }
 
@@ -91,10 +105,14 @@ static uint16_t lns_to_sf16(uint16_t p)
 uint16_t unorm16_to_sf16(uint16_t p)
 {
 	if (p == 0xFFFF)
+	{
 		return 0x3C00;			// value of 1.0
+	}
 
 	if (p < 4)
+	{
 		return p << 8;
+	}
 
 	int lz = clz32(p) - 16;
 	p <<= (lz + 1);
@@ -106,21 +124,26 @@ uint16_t unorm16_to_sf16(uint16_t p)
 void imageblock_initialize_deriv(
 	const imageblock* pb,
 	int pixelcount,
-	float4* dptr
+	vfloat4* dptr
 ) {
 	for (int i = 0; i < pixelcount; i++)
 	{
+		float dr = 65535.0f;
+		float dg = 65535.0f;
+		float db = 65535.0f;
+		float da = 65535.0f;
+
 		// compute derivatives for RGB first
 		if (pb->rgb_lns[i])
 		{
-			float3 fdata = float3(pb->data_r[i], pb->data_g[i], pb->data_b[i]);
-			fdata.r = sf16_to_float(lns_to_sf16((uint16_t)fdata.r));
-			fdata.g = sf16_to_float(lns_to_sf16((uint16_t)fdata.g));
-			fdata.b = sf16_to_float(lns_to_sf16((uint16_t)fdata.b));
+			vfloat4 fdata = pb->texel3(i);
+			fdata.set_lane<0>(sf16_to_float(lns_to_sf16((uint16_t)fdata.lane<0>())));
+			fdata.set_lane<1>(sf16_to_float(lns_to_sf16((uint16_t)fdata.lane<1>())));
+			fdata.set_lane<2>(sf16_to_float(lns_to_sf16((uint16_t)fdata.lane<2>())));
 
-			float r = astc::max(fdata.r, 6e-5f);
-			float g = astc::max(fdata.g, 6e-5f);
-			float b = astc::max(fdata.b, 6e-5f);
+			float r = astc::max(fdata.lane<0>(), 6e-5f);
+			float g = astc::max(fdata.lane<1>(), 6e-5f);
+			float b = astc::max(fdata.lane<2>(), 6e-5f);
 
 			float rderiv = (float_to_lns(r * 1.05f) - float_to_lns(r)) / (r * 0.05f);
 			float gderiv = (float_to_lns(g * 1.05f) - float_to_lns(g)) / (g * 0.05f);
@@ -128,19 +151,9 @@ void imageblock_initialize_deriv(
 
 			// the derivative may not actually take values smaller than 1/32 or larger than 2^25;
 			// if it does, we clamp it.
-			rderiv = astc::clamp(rderiv, 1.0f / 32.0f, 33554432.0f);
-			gderiv = astc::clamp(gderiv, 1.0f / 32.0f, 33554432.0f);
-			bderiv = astc::clamp(bderiv, 1.0f / 32.0f, 33554432.0f);
-
-			dptr->r = rderiv;
-			dptr->g = gderiv;
-			dptr->b = bderiv;
-		}
-		else
-		{
-			dptr->r = 65535.0f;
-			dptr->g = 65535.0f;
-			dptr->b = 65535.0f;
+			dr = astc::clamp(rderiv, 1.0f / 32.0f, 33554432.0f);
+			dg = astc::clamp(gderiv, 1.0f / 32.0f, 33554432.0f);
+			db = astc::clamp(bderiv, 1.0f / 32.0f, 33554432.0f);
 		}
 
 		// then compute derivatives for Alpha
@@ -153,26 +166,20 @@ void imageblock_initialize_deriv(
 			float aderiv = (float_to_lns(a * 1.05f) - float_to_lns(a)) / (a * 0.05f);
 			// the derivative may not actually take values smaller than 1/32 or larger than 2^25;
 			// if it does, we clamp it.
-			aderiv = astc::clamp(aderiv, 1.0f / 32.0f, 33554432.0f);
-
-			dptr->a = aderiv;
-		}
-		else
-		{
-			dptr->a = 65535.0f;
+			da = astc::clamp(aderiv, 1.0f / 32.0f, 33554432.0f);
 		}
 
+		*dptr = vfloat4(dr, dg, db, da);
 		dptr++;
 	}
 }
 
 // helper function to initialize the work-data from the orig-data
-void imageblock_initialize_work_from_orig(
+static void imageblock_initialize_work_from_orig(
 	imageblock* pb,
 	int pixelcount
 ) {
-	pb->origin_texel = float4(pb->data_r[0], pb->data_g[0],
-	                          pb->data_b[0], pb->data_a[0]);
+	pb->origin_texel = pb->texel(0);
 
 	vfloat4 data_min(1e38f);
 	vfloat4 data_max(-1e38f);
@@ -180,8 +187,7 @@ void imageblock_initialize_work_from_orig(
 
 	for (int i = 0; i < pixelcount; i++)
 	{
-		vfloat4 data = vfloat4(pb->data_r[i], pb->data_g[i],
-		                       pb->data_b[i], pb->data_a[i]);
+		vfloat4 data = pb->texel(i);
 
 		if (pb->rgb_lns[i])
 		{
@@ -238,8 +244,7 @@ void imageblock_initialize_orig_from_work(
 
 	for (int i = 0; i < pixelcount; i++)
 	{
-		vfloat4 data = vfloat4(pb->data_r[i], pb->data_g[i],
-		                       pb->data_b[i], pb->data_a[i]);
+		vfloat4 data = pb->texel(i);
 
 		if (pb->rgb_lns[i])
 		{
@@ -318,16 +323,16 @@ void fetch_imageblock(
 
 		for (int z = 0; z < bsd->zdim; z++)
 		{
-			int zi = astc::clamp(zpos + z, 0, zsize - 1);
+			int zi = astc::min(zpos + z, zsize - 1);
 			uint8_t* data8 = static_cast<uint8_t*>(img.data[zi]);
 
 			for (int y = 0; y < bsd->ydim; y++)
 			{
-				int yi = astc::clamp(ypos + y, 0, ysize - 1);
+				int yi = astc::min(ypos + y, ysize - 1);
 
 				for (int x = 0; x < bsd->xdim; x++)
 				{
-					int xi = astc::clamp(xpos + x, 0, xsize - 1);
+					int xi = astc::min(xpos + x, xsize - 1);
 
 					int r = data8[(4 * xsize * yi) + (4 * xi    )];
 					int g = data8[(4 * xsize * yi) + (4 * xi + 1)];
@@ -364,16 +369,16 @@ void fetch_imageblock(
 
 		for (int z = 0; z < bsd->zdim; z++)
 		{
-			int zi = astc::clamp(zpos + z, 0, zsize - 1);
+			int zi = astc::min(zpos + z, zsize - 1);
 			uint16_t* data16 = static_cast<uint16_t*>(img.data[zi]);
 
 			for (int y = 0; y < bsd->ydim; y++)
 			{
-				int yi = astc::clamp(ypos + y, 0, ysize - 1);
+				int yi = astc::min(ypos + y, ysize - 1);
 
 				for (int x = 0; x < bsd->xdim; x++)
 				{
-					int xi = astc::clamp(xpos + x, 0, xsize - 1);
+					int xi = astc::min(xpos + x, xsize - 1);
 
 					int r = data16[(4 * xsize * yi) + (4 * xi    )];
 					int g = data16[(4 * xsize * yi) + (4 * xi + 1)];
@@ -412,16 +417,16 @@ void fetch_imageblock(
 
 		for (int z = 0; z < bsd->zdim; z++)
 		{
-			int zi = astc::clamp(zpos + z, 0, zsize - 1);
+			int zi = astc::min(zpos + z, zsize - 1);
 			float* data32 = static_cast<float*>(img.data[zi]);
 
 			for (int y = 0; y < bsd->ydim; y++)
 			{
-				int yi = astc::clamp(ypos + y, 0, ysize - 1);
+				int yi = astc::min(ypos + y, ysize - 1);
 
 				for (int x = 0; x < bsd->xdim; x++)
 				{
-					int xi = astc::clamp(xpos + x, 0, xsize - 1);
+					int xi = astc::min(xpos + x, xsize - 1);
 
 					float r = data32[(4 * xsize * yi) + (4 * xi    )];
 					float g = data32[(4 * xsize * yi) + (4 * xi + 1)];
@@ -497,7 +502,7 @@ void write_imageblock(
 	{
 		for (int z = 0; z < bsd->zdim; z++)
 		{
-			int zc = astc::clamp(zpos + z, 0, zsize - 1);
+			int zc = astc::min(zpos + z, zsize - 1);
 			uint8_t* data8 = static_cast<uint8_t*>(img.data[zc]);
 
 			for (int y = 0; y < bsd->ydim; y++)
@@ -567,7 +572,7 @@ void write_imageblock(
 	{
 		for (int z = 0; z < bsd->zdim; z++)
 		{
-			int zc = astc::clamp(zpos + z, 0, zsize - 1);
+			int zc = astc::min(zpos + z, zsize - 1);
 			uint16_t* data16 = static_cast<uint16_t*>(img.data[zc]);
 
 			for (int y = 0; y < bsd->ydim; y++)
@@ -638,7 +643,7 @@ void write_imageblock(
 
 		for (int z = 0; z < bsd->zdim; z++)
 		{
-			int zc = astc::clamp(zpos + z, 0, zsize - 1);
+			int zc = astc::min(zpos + z, zsize - 1);
 			float* data32 = static_cast<float*>(img.data[zc]);
 
 			for (int y = 0; y < bsd->ydim; y++)

@@ -6,11 +6,43 @@ release of the 2.x series.
 All performance data on this page is measured on an Intel Core i5-9600K
 clocked at 4.2 GHz, running astcenc using 6 threads.
 
+<!-- ---------------------------------------------------------------------- -->
+## 2.5
+
+**Status:** In development
+
+The 2.5 release is the sixth release in the 2.x series. For this release
+onwards the 2.x series is aiming to freeze image quality compared to 2.4,
+allowing only minor differences caused by rounding and association changes.
+
+**General:**
+  * **Feature:** The `ISA_INVARIANCE` build option is no longer supported, as
+    there is no longer any performance benefit from the variant paths. All
+	builds are now using the equivalent of the `ISA_INVARIANCE=ON` setting.
+
+<!-- ---------------------------------------------------------------------- -->
+## 2.4
+
+**Status:** Released, February 2021
+
+The 2.4 release is the fifth release in the 2.x series. It is primarily a bug
+fix release for HDR image handling, which impacts all earlier 2.x series
+releases.
+
+**General:**
+  * **Feature:** When using the `-a` option, or the equivalent config option
+    for the API, any 2D blocks that are entirely zero alpha after the alpha
+    filter radius is taken into account are replaced by transparent black
+    constant color blocks. This is an RDO-like technique to improve compression
+    ratios of any additional application packaging compression that is applied.
+**Command Line:**
+  * **Bug fix:** The command line wrapper now correctly loads HDR images that
+    have a non-square aspect ratio.
 
 <!-- ---------------------------------------------------------------------- -->
 ## 2.3
 
-**Status:** In development
+**Status:** Released, January 2021
 
 The 2.3 release is the fourth release in the 2.x series. It includes a number
 of performance improvements and new features.
@@ -85,16 +117,11 @@ longer test or refine may have been better coding choices.
 
 **Absolute performance vs 2.2 release:**
 
-<!-- ![Absolute scores 2.2 vs 2.1](./ChangeLogImg/absolute-2.1-to-2.2.png) -->
-
-TBD
+![Absolute scores 2.3 vs 2.2](./ChangeLogImg/absolute-2.2-to-2.3.png)
 
 **Relative performance vs 2.2 release:**
 
-<!-- ![Relative scores 2.2 vs 2.1](./ChangeLogImg/relative-2.1-to-2.2.png) -->
-
-TBD
-
+![Relative scores 2.3 vs 2.2](./ChangeLogImg/relative-2.2-to-2.3.png)
 
 <!-- ---------------------------------------------------------------------- -->
 ## 2.2

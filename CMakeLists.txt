@@ -20,7 +20,7 @@ cmake_minimum_required(VERSION 3.10)
 cmake_policy(SET CMP0069 NEW)  # LTO support
 #cmake_policy(SET CMP0091 NEW)  # MSVC runtime support
 
-project(astcenc VERSION 2.3.0)
+project(astcenc VERSION 2.5.0)
 
 # Command line configuration
 function(printopt optName optVal optArch tgtArch)
@@ -77,13 +77,6 @@ if(${ISA_NONE})
     message("  -- No SIMD backend - ON")
 else()
     message("  -- No SIMD backend - OFF")
-endif()
-
-option(ISA_INVARIANCE "Enable builds for ISA invariance")
-if(${ISA_INVARIANCE})
-    message("  -- ISA invariant backend - ON")
-else()
-    message("  -- ISA invariant backend - OFF")
 endif()
 
 option(DECOMPRESSOR "Enable builds for decompression only")

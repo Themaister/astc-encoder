@@ -374,6 +374,53 @@ TEST(vfloat4, LaneID)
 	EXPECT_EQ(a.lane<3>(), 3.0f);
 }
 
+/** @brief Test vfloat4 swz to float4. */
+TEST(vfloat4, swz4)
+{
+	vfloat4 a(1.0f, 2.0f, 3.0f, 4.0f);
+	vfloat4 r = a.swz<0, 3, 2, 1>();
+	EXPECT_EQ(r.lane<0>(), 1.0f);
+	EXPECT_EQ(r.lane<1>(), 4.0f);
+	EXPECT_EQ(r.lane<2>(), 3.0f);
+	EXPECT_EQ(r.lane<3>(), 2.0f);
+
+	r = a.swz<3, 1, 1, 0>();
+	EXPECT_EQ(r.lane<0>(), 4.0f);
+	EXPECT_EQ(r.lane<1>(), 2.0f);
+	EXPECT_EQ(r.lane<2>(), 2.0f);
+	EXPECT_EQ(r.lane<3>(), 1.0f);
+}
+
+/** @brief Test vfloat4 swz to float3. */
+TEST(vfloat4, swz3)
+{
+	vfloat4 a(1.0f, 2.0f, 3.0f, 4.0f);
+	vfloat4 r = a.swz<0, 3, 2>();
+	EXPECT_EQ(r.lane<0>(), 1.0f);
+	EXPECT_EQ(r.lane<1>(), 4.0f);
+	EXPECT_EQ(r.lane<2>(), 3.0f);
+	EXPECT_EQ(r.lane<3>(), 0.0f);
+
+	r = a.swz<3, 1, 1>();
+	EXPECT_EQ(r.lane<0>(), 4.0f);
+	EXPECT_EQ(r.lane<1>(), 2.0f);
+	EXPECT_EQ(r.lane<2>(), 2.0f);
+	EXPECT_EQ(r.lane<3>(), 0.0f);
+}
+
+/** @brief Test vfloat4 swz to float2. */
+TEST(vfloat4, swz2)
+{
+	vfloat4 a(1.0f, 2.0f, 3.0f, 4.0f);
+	float2 r = a.swz<0, 3>();
+	EXPECT_EQ(r.r, 1.0f);
+	EXPECT_EQ(r.g, 4.0f);
+
+	r = a.swz<2, 1>();
+	EXPECT_EQ(r.r, 3.0f);
+	EXPECT_EQ(r.g, 2.0f);
+}
+
 /** @brief Test vfloat4 add. */
 TEST(vfloat4, vadd)
 {
@@ -726,6 +773,18 @@ TEST(vfloat4, hmin_s)
 	EXPECT_EQ(r2, 0.2f);
 }
 
+/** @brief Test vfloat4 hmin_rgb_s. */
+TEST(vfloat4, hmin_rgb_s)
+{
+	vfloat4 a1(1.1f, 1.5f, 1.6f, 0.2f);
+	float r1 = hmin_rgb_s(a1);
+	EXPECT_EQ(r1, 1.1f);
+
+	vfloat4 a2(1.5f, 0.9f, 1.6f, 1.2f);
+	float r2 = hmin_rgb_s(a2);
+	EXPECT_EQ(r2, 0.9f);
+}
+
 /** @brief Test vfloat4 hmax. */
 TEST(vfloat4, hmax)
 {
@@ -756,12 +815,21 @@ TEST(vfloat4, hmax_s)
 	EXPECT_EQ(r2, 1.6f);
 }
 
-/** @brief Test vfloat4 hadd. */
+/** @brief Test vfloat4 hadd_s. */
 TEST(vfloat4, hadd_s)
 {
 	vfloat4 a1(1.1f, 1.5f, 1.6f, 4.0f);
 	float sum = 1.1f + 1.5f + 1.6f + 4.0f;
 	float r = hadd_s(a1);
+	EXPECT_NEAR(r, sum, 0.005f);
+}
+
+/** @brief Test vfloat4 hadd_rgb_s. */
+TEST(vfloat4, hadd_rgb_s)
+{
+	vfloat4 a1(1.1f, 1.5f, 1.6f, 4.0f);
+	float sum = 1.1f + 1.5f + 1.6f;
+	float r = hadd_rgb_s(a1);
 	EXPECT_NEAR(r, sum, 0.005f);
 }
 
@@ -836,6 +904,18 @@ TEST(vfloat4, gatherf)
 	EXPECT_EQ(r.lane<3>(), 2.0f);
 }
 
+/** @brief Test vfloat4 storea. */
+TEST(vfloat4, storea)
+{
+	alignas(16) float out[4];
+	vfloat4 a(f32_data);
+	storea(a, out);
+	EXPECT_EQ(out[0], 0.0f);
+	EXPECT_EQ(out[1], 1.0f);
+	EXPECT_EQ(out[2], 2.0f);
+	EXPECT_EQ(out[3], 3.0f);
+}
+
 /** @brief Test vfloat4 store. */
 TEST(vfloat4, store)
 {
@@ -846,18 +926,6 @@ TEST(vfloat4, store)
 	EXPECT_EQ(out[2], 1.0f);
 	EXPECT_EQ(out[3], 2.0f);
 	EXPECT_EQ(out[4], 3.0f);
-}
-
-/** @brief Test vfloat4 storea. */
-TEST(vfloat4, storea)
-{
-	alignas(16) float out[4];
-	vfloat4 a(f32_data);
-	store(a, out);
-	EXPECT_EQ(out[0], 0.0f);
-	EXPECT_EQ(out[1], 1.0f);
-	EXPECT_EQ(out[2], 2.0f);
-	EXPECT_EQ(out[3], 3.0f);
 }
 
 /** @brief Test vfloat4 dot. */
@@ -881,26 +949,25 @@ TEST(vfloat4, dot_s)
 	EXPECT_EQ(r, 4.0f);
 }
 
-/** @brief Test vfloat4 reciprocal. */
-TEST(vfloat4, recip)
+/** @brief Test vfloat4 dot3. */
+TEST(vfloat4, dot3)
 {
-	vfloat4 a(1.0f, 2.0f, 3.0f, 4.0f);
-	vfloat4 r = recip(a);
-	EXPECT_NEAR(r.lane<0>(), 1.0f / 1.0f, 0.0005f);
-	EXPECT_NEAR(r.lane<1>(), 1.0f / 2.0f, 0.0005f);
-	EXPECT_NEAR(r.lane<2>(), 1.0f / 3.0f, 0.0005f);
-	EXPECT_NEAR(r.lane<3>(), 1.0f / 4.0f, 0.0005f);
+	vfloat4 a(1.0f, 2.0f, 4.0f, 8.0f);
+	vfloat4 b(1.0f, 0.5f, 0.25f, 0.125f);
+	vfloat4 r = dot3(a, b);
+	EXPECT_EQ(r.lane<0>(), 3.0f);
+	EXPECT_EQ(r.lane<1>(), 3.0f);
+	EXPECT_EQ(r.lane<2>(), 3.0f);
+	EXPECT_EQ(r.lane<3>(), 0.0f);
 }
 
-/** @brief Test vfloat4 reciprocal. */
-TEST(vfloat4, fast_recip)
+/** @brief Test vfloat4 dot3_s. */
+TEST(vfloat4, dot3_s)
 {
-	vfloat4 a(1.0f, 2.0f, 3.0f, 4.0f);
-	vfloat4 r = fast_recip(a);
-	EXPECT_NEAR(r.lane<0>(), 1.0f / 1.0f, 0.0005f);
-	EXPECT_NEAR(r.lane<1>(), 1.0f / 2.0f, 0.0005f);
-	EXPECT_NEAR(r.lane<2>(), 1.0f / 3.0f, 0.0005f);
-	EXPECT_NEAR(r.lane<3>(), 1.0f / 4.0f, 0.0005f);
+	vfloat4 a(1.0f, 2.0f, 4.0f, 8.0f);
+	vfloat4 b(1.0f, 0.5f, 0.25f, 0.125f);
+	float r = dot3_s(a, b);
+	EXPECT_EQ(r, 3.0f);
 }
 
 /** @brief Test vfloat4 normalize. */
@@ -934,6 +1001,17 @@ TEST(vfloat4, float_to_int_rtn)
 	EXPECT_EQ(r.lane<1>(), 2);
 	EXPECT_EQ(r.lane<2>(), 2);
 	EXPECT_EQ(r.lane<3>(), 4);
+}
+
+/** @brief Test vfloat4 round. */
+TEST(vfloat4, int_to_float)
+{
+	vint4 a(1, 2, 3, 4);
+	vfloat4 r = int_to_float(a);
+	EXPECT_EQ(r.lane<0>(), 1.0f);
+	EXPECT_EQ(r.lane<1>(), 2.0f);
+	EXPECT_EQ(r.lane<2>(), 3.0f);
+	EXPECT_EQ(r.lane<3>(), 4.0f);
 }
 
 
@@ -990,6 +1068,35 @@ TEST(vint4, CopyLoad)
 	EXPECT_EQ(a.lane<3>(), 44);
 }
 
+/** @brief Test vint4 scalar lane set. */
+TEST(int4, SetLane)
+{
+	vint4 a(0);
+
+	a.set_lane<0>(1);
+	EXPECT_EQ(a.lane<0>(), 1);
+	EXPECT_EQ(a.lane<1>(), 0);
+	EXPECT_EQ(a.lane<2>(), 0);
+	EXPECT_EQ(a.lane<3>(), 0);
+
+	a.set_lane<1>(2);
+	EXPECT_EQ(a.lane<0>(), 1);
+	EXPECT_EQ(a.lane<1>(), 2);
+	EXPECT_EQ(a.lane<2>(), 0);
+	EXPECT_EQ(a.lane<3>(), 0);
+
+	a.set_lane<2>(3);
+	EXPECT_EQ(a.lane<0>(), 1);
+	EXPECT_EQ(a.lane<1>(), 2);
+	EXPECT_EQ(a.lane<2>(), 3);
+	EXPECT_EQ(a.lane<3>(), 0);
+
+	a.set_lane<3>(4);
+	EXPECT_EQ(a.lane<0>(), 1);
+	EXPECT_EQ(a.lane<1>(), 2);
+	EXPECT_EQ(a.lane<2>(), 3);
+	EXPECT_EQ(a.lane<3>(), 4);
+}
 
 /** @brief Test vint4 zero. */
 TEST(vint4, Zero)
@@ -1054,6 +1161,36 @@ TEST(vint4, vsub)
 	EXPECT_EQ(a.lane<1>(), 2 - 3);
 	EXPECT_EQ(a.lane<2>(), 4 - 3);
 	EXPECT_EQ(a.lane<3>(), 4 - 5);
+}
+
+/** @brief Test vint4 mul. */
+TEST(vint4, vmul)
+{
+	vint4 a(1, 2, 4, 4);
+	vint4 b(2, 3, 3, 5);
+	a = a * b;
+	EXPECT_EQ(a.lane<0>(), 1 * 2);
+	EXPECT_EQ(a.lane<1>(), 2 * 3);
+	EXPECT_EQ(a.lane<2>(), 4 * 3);
+	EXPECT_EQ(a.lane<3>(), 4 * 5);
+}
+
+/** @brief Test vint4 mul. */
+TEST(vint4, vsmul)
+{
+	vint4 a(1, 2, 4, 4);
+	a = a * 3;
+	EXPECT_EQ(a.lane<0>(), 1 * 3);
+	EXPECT_EQ(a.lane<1>(), 2 * 3);
+	EXPECT_EQ(a.lane<2>(), 4 * 3);
+	EXPECT_EQ(a.lane<3>(), 4 * 3);
+
+	vint4 b(1, 2, -4, 4);
+	b = b * -3;
+	EXPECT_EQ(b.lane<0>(), 1 * -3);
+	EXPECT_EQ(b.lane<1>(), 2 * -3);
+	EXPECT_EQ(b.lane<2>(), -4 * -3);
+	EXPECT_EQ(b.lane<3>(), 4 * -3);
 }
 
 /** @brief Test vint4 bitwise invert. */
@@ -1183,6 +1320,29 @@ TEST(vint4, cle)
 	EXPECT_EQ(0x1, mask(r));
 }
 
+/** @brief Test vint4 lsr. */
+TEST(vint4, lsr)
+{
+	vint4 a(1, 2, 4, 4);
+	a = lsr<0>(a);
+	EXPECT_EQ(a.lane<0>(), 1);
+	EXPECT_EQ(a.lane<1>(), 2);
+	EXPECT_EQ(a.lane<2>(), 4);
+	EXPECT_EQ(a.lane<3>(), 4);
+
+	a = lsr<1>(a);
+	EXPECT_EQ(a.lane<0>(), 0);
+	EXPECT_EQ(a.lane<1>(), 1);
+	EXPECT_EQ(a.lane<2>(), 2);
+	EXPECT_EQ(a.lane<3>(), 2);
+
+	a = lsr<2>(a);
+	EXPECT_EQ(a.lane<0>(), 0);
+	EXPECT_EQ(a.lane<1>(), 0);
+	EXPECT_EQ(a.lane<2>(), 0);
+	EXPECT_EQ(a.lane<3>(), 0);
+}
+
 /** @brief Test vint4 min. */
 TEST(vint4, min)
 {
@@ -1235,6 +1395,18 @@ TEST(vint4, storea)
 	EXPECT_EQ(out[1], 1);
 	EXPECT_EQ(out[2], 2);
 	EXPECT_EQ(out[3], 3);
+}
+
+/** @brief Test vint4 store. */
+TEST(vint4, store)
+{
+	alignas(16) int out[5];
+	vint4 a(s32_data);
+	store(a, &(out[1]));
+	EXPECT_EQ(out[1], 0);
+	EXPECT_EQ(out[2], 1);
+	EXPECT_EQ(out[3], 2);
+	EXPECT_EQ(out[4], 3);
 }
 
 /** @brief Test vint4 store_nbytes. */
@@ -1580,6 +1752,40 @@ TEST(vfloat8, vdiv)
 	EXPECT_EQ(a.lane<7>(), 8.0f / 0.8f);
 }
 
+/** @brief Test vfloat8 div. */
+TEST(vfloat8, vsdiv)
+{
+	vfloat8 a(0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f);
+	float b = 3.14f;
+	vfloat8 r = a / b;
+
+	EXPECT_EQ(r.lane<0>(), 0.1f / 3.14f);
+	EXPECT_EQ(r.lane<1>(), 0.2f / 3.14f);
+	EXPECT_EQ(r.lane<2>(), 0.3f / 3.14f);
+	EXPECT_EQ(r.lane<3>(), 0.4f / 3.14f);
+	EXPECT_EQ(r.lane<4>(), 0.5f / 3.14f);
+	EXPECT_EQ(r.lane<5>(), 0.6f / 3.14f);
+	EXPECT_EQ(r.lane<6>(), 0.7f / 3.14f);
+	EXPECT_EQ(r.lane<7>(), 0.8f / 3.14f);
+}
+
+/** @brief Test vfloat8 div. */
+TEST(vfloat8, svdiv)
+{
+	float a = 3.14f;
+	vfloat8 b(0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f);
+	vfloat8 r = a / b;
+
+	EXPECT_EQ(r.lane<0>(), 3.14f / 0.1f);
+	EXPECT_EQ(r.lane<1>(), 3.14f / 0.2f);
+	EXPECT_EQ(r.lane<2>(), 3.14f / 0.3f);
+	EXPECT_EQ(r.lane<3>(), 3.14f / 0.4f);
+	EXPECT_EQ(r.lane<4>(), 3.14f / 0.5f);
+	EXPECT_EQ(r.lane<5>(), 3.14f / 0.6f);
+	EXPECT_EQ(r.lane<6>(), 3.14f / 0.7f);
+	EXPECT_EQ(r.lane<7>(), 3.14f / 0.8f);
+}
+
 /** @brief Test vfloat8 ceq. */
 TEST(vfloat8, ceq)
 {
@@ -1916,37 +2122,6 @@ TEST(vfloat8, sqrt)
 	EXPECT_EQ(r.lane<5>(), std::sqrt(2.0f));
 	EXPECT_EQ(r.lane<6>(), std::sqrt(3.0f));
 	EXPECT_EQ(r.lane<7>(), std::sqrt(4.0f));
-}
-
-
-/** @brief Test vfloat8 reciprocal. */
-TEST(vfloat8, recip)
-{
-	vfloat8 a(1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f);
-	vfloat8 r = recip(a);
-	EXPECT_NEAR(r.lane<0>(), 1.0f / 1.0f, 0.0005f);
-	EXPECT_NEAR(r.lane<1>(), 1.0f / 2.0f, 0.0005f);
-	EXPECT_NEAR(r.lane<2>(), 1.0f / 3.0f, 0.0005f);
-	EXPECT_NEAR(r.lane<3>(), 1.0f / 4.0f, 0.0005f);
-	EXPECT_NEAR(r.lane<4>(), 1.0f / 5.0f, 0.0005f);
-	EXPECT_NEAR(r.lane<5>(), 1.0f / 6.0f, 0.0005f);
-	EXPECT_NEAR(r.lane<6>(), 1.0f / 7.0f, 0.0005f);
-	EXPECT_NEAR(r.lane<7>(), 1.0f / 8.0f, 0.0005f);
-}
-
-/** @brief Test vfloat8 reciprocal. */
-TEST(vfloat8, fast_recip)
-{
-	vfloat8 a(1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f);
-	vfloat8 r = fast_recip(a);
-	EXPECT_NEAR(r.lane<0>(), 1.0f / 1.0f, 0.0005f);
-	EXPECT_NEAR(r.lane<1>(), 1.0f / 2.0f, 0.0005f);
-	EXPECT_NEAR(r.lane<2>(), 1.0f / 3.0f, 0.0005f);
-	EXPECT_NEAR(r.lane<3>(), 1.0f / 4.0f, 0.0005f);
-	EXPECT_NEAR(r.lane<4>(), 1.0f / 5.0f, 0.0005f);
-	EXPECT_NEAR(r.lane<5>(), 1.0f / 6.0f, 0.0005f);
-	EXPECT_NEAR(r.lane<6>(), 1.0f / 7.0f, 0.0005f);
-	EXPECT_NEAR(r.lane<7>(), 1.0f / 8.0f, 0.0005f);
 }
 
 /** @brief Test vfloat8 select. */

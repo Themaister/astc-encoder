@@ -22,7 +22,7 @@
 #include "astcenccli_internal.h"
 
 static const char *astcenc_copyright_string =
-R"(astcenc v2.3, %u-bit %s%s
+R"(astcenc v2.5-develop, %u-bit %s%s
 Copyright 2011-2021 Arm Limited, all rights reserved
 )";
 
@@ -263,6 +263,11 @@ ADVANCED COMPRESSION
            of the texel defined by the <radius> argument. Setting <radius>
            to 0 causes only the texel's own alpha to be used.
 
+           ASTC blocks that are entirely zero weighted, after the radius is
+           taken into account, are replaced by constant color blocks. This
+           is an RDO-like technique to improve compression ratio in any
+           application packaging level compression that is applied.
+
        -cw <red> <green> <blue> <alpha>
            Assign an additional weight scaling to each color channel,
            allowing the channels to be treated differently in terms of
@@ -500,6 +505,20 @@ DECOMPRESSION FILE FORMATS
            Container Formats:
                Khronos Texture KTX (*.ktx)
                DirectDraw Surface DDS (*.dds)
+
+QUICK REFERENCE
+
+       To compress an image use:
+           astcenc {-cl|-cs|-ch|-cH} <in> <out> <blockdim> <quality> [options]
+
+       To decompress an image use:
+           astcenc {-dl|-ds|-dh|-dH} <in> <out>
+
+       To perform a quality test use:
+           astcenc {-tl|-ts|-th|-tH} <in> <out> <blockdim> <quality> [options]
+
+       Mode -*l = linear LDR, -*s = sRGB LDR, -*h = HDR RGB/LDR A, -*H = HDR.
+       Quality = -fastest/-fast/-medium/-thorough/-exhaustive/a float [0-100].
 )";
 
 // print version and basic build information

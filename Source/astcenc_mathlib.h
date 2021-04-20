@@ -27,6 +27,52 @@
 #include <cstdint>
 #include <cmath>
 
+#ifndef ASTCENC_SSE
+  #if defined(__SSE4_2__)
+    #define ASTCENC_SSE 42
+  #elif defined(__SSE4_1__)
+    #define ASTCENC_SSE 41
+  #elif defined(__SSE3__)
+    #define ASTCENC_SSE 30
+  #elif defined(__SSE2__)
+    #define ASTCENC_SSE 20
+  #else
+    #define ASTCENC_SSE 0
+  #endif
+#endif
+
+#ifndef ASTCENC_POPCNT
+  #if defined(__POPCNT__)
+    #define ASTCENC_POPCNT 1
+  #else
+    #define ASTCENC_POPCNT 0
+  #endif
+#endif
+
+#ifndef ASTCENC_AVX
+  #if defined(__AVX2__)
+    #define ASTCENC_AVX 2
+  #elif defined(__AVX__)
+    #define ASTCENC_AVX 1
+  #else
+    #define ASTCENC_AVX 0
+  #endif
+#endif
+
+#ifndef ASTCENC_NEON
+  #if defined(__aarch64__)
+    #define ASTCENC_NEON 1
+  #else
+    #define ASTCENC_NEON 0
+  #endif
+#endif
+
+#if ASTCENC_AVX
+  #define ASTCENC_VECALIGN 32
+#else
+  #define ASTCENC_VECALIGN 16
+#endif
+
 #if ASTCENC_SSE != 0 || ASTCENC_AVX != 0
 	#include <immintrin.h>
 #endif
@@ -41,6 +87,14 @@
   have an option based on SSE intrinsics and therefore provide an obvious route
   to future vectorization.
 ============================================================================ */
+
+// Union for manipulation of float bit patterns
+typedef union
+{
+	uint32_t u;
+	int32_t s;
+	float f;
+} if32;
 
 // These are namespaced to avoid colliding with C standard library functions.
 namespace astc
@@ -156,6 +210,41 @@ template<typename T>
 static inline T max(T p, T q)
 {
 	return p > q ? p : q;
+}
+
+/**
+ * @brief Return the maximum of three values.
+ *
+ * For floats, NaNs are turned into @c r.
+ *
+ * @param p   The first value to compare.
+ * @param q   The second value to compare.
+ * @param r   The third value to compare.
+ *
+ * @return The largest value.
+ */
+template<typename T>
+static inline T max(T p, T q, T r)
+{
+	return max(max(p, q), r);
+}
+
+/**
+ * @brief Return the maximum of four values.
+ *
+ * For floats, NaNs are turned into @c s.
+ *
+ * @param p   The first value to compare.
+ * @param q   The second value to compare.
+ * @param r   The third value to compare.
+ * @param s   The fourth value to compare.
+ *
+ * @return The largest value.
+ */
+template<typename T>
+static inline T max(T p, T q, T r, T s)
+{
+	return max(max(p, q), max(r, s));
 }
 
 /**
@@ -321,6 +410,23 @@ static inline float sqrt(float v)
 }
 
 /**
+ * @brief Extract mantissa and exponent of a float value.
+ *
+ * @param      v      The input value.
+ * @param[out] expo   The output exponent.
+ *
+ * @return The mantissa.
+ */
+static inline float frexp(float v, int* expo)
+{
+	if32 p;
+	p.f = v;
+	*expo = ((p.u >> 23) & 0xFF) - 126;
+	p.u = (p.u & 0x807fffff) | 0x3f000000;
+	return p.f;
+}
+
+/**
  * @brief Log base 2, linearized from 2^-14.
  *
  * @param v   The value to log2.
@@ -425,170 +531,15 @@ vtype2<T> operator*(T p, vtype2<T> q) {
 	return vtype2<T> { p * q.r, p * q.g };
 }
 
-template <typename T> class vtype3
-{
-public:
-	// Data storage
-	T r, g, b;
-
-	// Default constructor
-	vtype3() {}
-
-	// Initialize from 1 scalar
-	vtype3(T p) : r(p), g(p), b(p) {}
-
-	// Initialize from N scalars
-	vtype3(T p, T q, T s) : r(p), g(q), b(s) {}
-
-	// Initialize from another vector
-	vtype3(const vtype3 & p) : r(p.r), g(p.g), b(p.b) {}
-
-	// Assignment operator
-	vtype3& operator=(const vtype3 &s) {
-		this->r = s.r;
-		this->g = s.g;
-		this->b = s.b;
-		return *this;
-	}
-};
-
-// Vector by vector addition
-template <typename T>
-vtype3<T> operator+(vtype3<T> p, vtype3<T> q) {
-	return vtype3<T> { p.r + q.r, p.g + q.g, p.b + q.b };
-}
-
-// Vector by vector subtraction
-template <typename T>
-vtype3<T> operator-(vtype3<T> p, vtype3<T> q) {
-	return vtype3<T> { p.r - q.r, p.g - q.g, p.b - q.b };
-}
-
-// Vector by vector multiplication operator
-template <typename T>
-vtype3<T> operator*(vtype3<T> p, vtype3<T> q) {
-	return vtype3<T> { p.r * q.r, p.g * q.g, p.b * q.b };
-}
-
-// Vector by scalar multiplication operator
-template <typename T>
-vtype3<T> operator*(vtype3<T> p, T q) {
-	return vtype3<T> { p.r * q, p.g * q, p.b * q };
-}
-
-// Scalar by vector multiplication operator
-template <typename T>
-vtype3<T> operator*(T p, vtype3<T> q) {
-	return vtype3<T> { p * q.r, p * q.g, p * q.b };
-}
-
-template <typename T> class alignas(16) vtype4
-{
-public:
-	// Data storage
-	T r, g, b, a;
-
-	// Default constructor
-	vtype4() {}
-
-	// Initialize from 1 scalar
-	vtype4(T p) : r(p), g(p), b(p), a(p) {}
-
-	// Initialize from N scalars
-	vtype4(T p, T q, T s, T t) : r(p), g(q), b(s), a(t) {}
-
-	// Initialize from another vector
-	vtype4(const vtype4 & p) : r(p.r), g(p.g), b(p.b), a(p.a) {}
-
-	// Assignment operator
-	vtype4& operator=(const vtype4 &s) {
-		this->r = s.r;
-		this->g = s.g;
-		this->b = s.b;
-		this->a = s.a;
-		return *this;
-	}
-};
-
-// Vector by vector addition
-template <typename T>
-vtype4<T> operator+(vtype4<T> p, vtype4<T> q) {
-	return vtype4<T> { p.r + q.r, p.g + q.g, p.b + q.b, p.a + q.a };
-}
-
-// Vector by vector subtraction
-template <typename T>
-vtype4<T> operator-(vtype4<T> p, vtype4<T> q) {
-	return vtype4<T> { p.r - q.r, p.g - q.g, p.b - q.b, p.a - q.a };
-}
-
-// Vector by vector multiplication operator
-template <typename T>
-vtype4<T> operator*(vtype4<T> p, vtype4<T> q) {
-	return vtype4<T> { p.r * q.r, p.g * q.g, p.b * q.b, p.a * q.a };
-}
-
-// Vector by scalar multiplication operator
-template <typename T>
-vtype4<T> operator*(vtype4<T> p, T q) {
-	return vtype4<T> { p.r * q, p.g * q, p.b * q, p.a * q };
-}
-
-// Scalar by vector multiplication operator
-template <typename T>
-vtype4<T> operator*(T p, vtype4<T> q) {
-	return vtype4<T> { p * q.r, p * q.g, p * q.b, p * q.a };
-}
-
 typedef vtype2<float>        float2;
-typedef vtype3<float>        float3;
-typedef vtype4<float>        float4;
-typedef vtype3<int>          int3;
-typedef vtype4<int>          int4;
-typedef vtype4<unsigned int> uint4;
 
 static inline float dot(float2 p, float2 q)  { return p.r * q.r + p.g * q.g; }
-static inline float dot(float3 p, float3 q)  { return p.r * q.r + p.g * q.g + p.b * q.b; }
-static inline float dot(float4 p, float4 q)  {
-#if (ASTCENC_SSE >= 41) && (ASTCENC_ISA_INVARIANCE == 0)
-	__m128 pv = _mm_load_ps((float*)&p);
-	__m128 qv = _mm_load_ps((float*)&q);
-	__m128 t  = _mm_dp_ps(pv, qv, 0xFF);
-	return _mm_cvtss_f32(t);
-#else
-	return p.r * q.r + p.g * q.g + p.b * q.b  + p.a * q.a;
-#endif
-}
 
 static inline float2 normalize(float2 p) { return p * astc::rsqrt(dot(p, p)); }
-static inline float3 normalize(float3 p) { return p * astc::rsqrt(dot(p, p)); }
-static inline float4 normalize(float4 p) { return p * astc::rsqrt(dot(p, p)); }
-
-static inline float4 sqrt(float4 p) {
-	float4 r;
-#if ASTCENC_SSE >= 20
-	__m128 pv = _mm_load_ps((float*)&p);
-	__m128 t  = _mm_sqrt_ps(pv);
-	_mm_store_ps((float*)&r, t);
-#else
-	r.r = std::sqrt(p.r);
-	r.g = std::sqrt(p.g);
-	r.b = std::sqrt(p.b);
-	r.a = std::sqrt(p.a);
-#endif
-	return r;
-}
 
 /* ============================================================================
   Softfloat library with fp32 and fp16 conversion functionality.
 ============================================================================ */
-typedef union if32_
-{
-	uint32_t u;
-	int32_t s;
-	float f;
-} if32;
-
 uint32_t clz32(uint32_t p);
 
 /*	sized soft-float types. These are mapped to the sized integer
@@ -618,6 +569,10 @@ sf16 float_to_sf16(float, roundmode);
 
 float sf16_to_float(sf16);
 
+/*********************************
+  Vector library
+*********************************/
+#include "astcenc_vecmathlib.h"
 
 /*********************************
   Declaration of line types
@@ -633,14 +588,14 @@ struct line2
 // parametric line, 3D
 struct line3
 {
-	float3 a;
-	float3 b;
+	vfloat4 a;
+	vfloat4 b;
 };
 
 struct line4
 {
-	float4 a;
-	float4 b;
+	vfloat4 a;
+	vfloat4 b;
 };
 
 
@@ -653,16 +608,16 @@ struct processed_line2
 
 struct processed_line3
 {
-	float3 amod;
-	float3 bs;
-	float3 bis;
+	vfloat4 amod;
+	vfloat4 bs;
+	vfloat4 bis;
 };
 
 struct processed_line4
 {
-	float4 amod;
-	float4 bs;
-	float4 bis;
+	vfloat4 amod;
+	vfloat4 bs;
+	vfloat4 bis;
 };
 
 #endif
